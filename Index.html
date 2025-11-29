@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fantasy Lineup Manager</title>
+  <style>
+    :root {
+      --bg:#0b1220; --card:#121a2b; --muted:#8aa0c8; --text:#eaf0ff; --accent:#4ac1ff; --danger:#ff6b6b; --ok:#70e000;
+    }
+    body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--text); }
+    .container { max-width:1100px; margin:0 auto; padding:24px; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .title { font-size:24px; font-weight:700; letter-spacing:0.2px; }
+    .card { background:var(--card); border:1px solid #1f2942; border-radius:12px; padding:16px; }
+    .grid { display:grid; grid-template-columns: repeat(3,1fr); gap:12px; }
+    .slot { border:1px solid #223052; border-radius:10px; padding:12px; background:#0f192e; }
+    .slot.locked { opacity:0.7 }
+    .slot h4 { margin:0 0 8px 0; font-size:14px; color: var(--muted); text-transform:uppercase; letter-spacing:0.8px; }
+    select, button, input { font-size:14px; }
+    select { width:100%; padding:8px; border-radius:8px; border:1px solid #2a3a62; background:#0c1629; color:var(--text); }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .pill { padding:6px 10px; border-radius:999px; background:#0f1e35; border:1px solid #223052; color:var(--muted); }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn { padding:10px 14px; border:1px solid #2a3a62; background:#0c1629; color:var(--text); border-radius:10px; cursor:pointer; }
+    .btn.primary { border-color: var(--accent); background:#0a1830; color:#d9f4ff; }
+    .btn.danger { border-color: var(--danger); color:#ffd9d9; }
+    .btn.ok { border-color: var(--ok); }
+    .muted { color: var(--muted); }
+    .match { font-size:12px; color:#a8bfef; margin-top:8px; }
+    .footer { margin-top:18px; font-size:12px; color:var(--muted); }
+    .teamCard { border:1px solid #1f2942; border-radius:12px; padding:12px; background:#0f192e; }
+    .teamCard h3 { margin:0 0 8px 0; font-size:16px; }
+    .list { max-height:160px; overflow:auto; padding-right:6px; }
+    .error { color: var(--danger); font-size:12px; margin-top:6px; }
+    .success { color: var(--ok); font-size:12px; margin-top:6px; }
+    @media (max-width:900px){ .grid{ grid-template-columns:1fr; } .header{flex-direction:column; align-items:flex-start;} }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React & Babel (CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const {useState, useMemo, useEffect} = React;
+
+    // ======================
+    // Data: Teams & Rosters
+    // ======================
+    const teams = {
+      "Jeff": [
+        { name: "Deshaun Watson", pos: "QB" },
+        { name: "Derrick Henry", pos: "RB" },
+        { name: "Travis Etienne Jr.", pos: "RB" },
+        { name: "Tony Pollard", pos: "RB" },
+        { name: "Justin Jefferson", pos: "WR" },
+        { name: "Keenan Allen", pos: "WR" },
+        { name: "Mike Williams", pos: "WR" },
+        { name: "Jahan Dotson", pos: "WR" },
+        { name: "Darren Waller", pos: "TE" },
+        { name: "James Conner", pos: "RB" }, // FLEX eligible
+        { name: "Jake Elliott", pos: "K" },
+        { name: "Miami Dolphins", pos: "DEF" }
+      ],
+      "JohnnyBoy": [
+        { name: "Aaron Rodgers", pos: "QB" },
+        { name: "Austin Ekeler", pos: "RB" },
+        { name: "Breece Hall", pos: "RB" },
+        { name: "Rachaad White", pos: "RB" },
+        { name: "A.J. Brown", pos: "WR" },
+        { name: "Amari Cooper", pos: "WR" },
+        { name: "Chris Godwin", pos: "WR" },
+        { name: "Jerry Jeudy", pos: "WR" },
+        { name: "Pat Freiermuth", pos: "TE" },
+        { name: "Dameon Pierce", pos: "RB" }, // FLEX eligible
+        { name: "Evan McPherson", pos: "K" },
+        { name: "New York Jets", pos: "DEF" }
+      ],
+      "Tom Rinaldi": [
+        { name: "Josh Allen", pos: "QB" },
+        { name: "Bijan Robinson", pos: "RB" },
+        { name: "Jahmyr Gibbs", pos: "RB" },
+        { name: "David Montgomery", pos: "RB" },
+        { name: "Stefon Diggs", pos: "WR" },
+        { name: "DeVonta Smith", pos: "WR" },
+        { name: "Drake London", pos: "WR" },
+        { name: "Treylon Burks", pos: "WR" },
+        { name: "Dallas Goedert", pos: "TE" },
+        { name: "Cam Akers", pos: "RB" }, // FLEX eligible
+        { name: "Harrison Butker", pos: "K" },
+        { name: "Baltimore Ravens", pos: "DEF" }
+      ],
+      "Ruff": [
+        { name: "Justin Herbert", pos: "QB" },
+        { name: "Saquon Barkley", pos: "RB" },
+        { name: "Joe Mixon", pos: "RB" },
+        { name: "J.K. Dobbins", pos: "RB" },
+        { name: "Garrett Wilson", pos: "WR" },
+        { name: "Christian Kirk", pos: "WR" },
+        { name: "Diontae Johnson", pos: "WR" },
+        { name: "Brandin Cooks", pos: "WR" },
+        { name: "Dalton Kincaid", pos: "TE" },
+        { name: "David Njoku", pos: "TE" }, // FLEX eligible (TE)
+        { name: "Tyler Bass", pos: "K" },
+        { name: "Buffalo Bills", pos: "DEF" }
+      ],
+      "Allen": [
+        { name: "Sam Darnold", pos: "QB" },
+        { name: "Jonathan Taylor", pos: "RB" },
+        { name: "Josh Jacobs", pos: "RB" },
+        { name: "Isiah Pacheco", pos: "RB" },
+        { name: "Tyreek Hill", pos: "WR" },
+        { name: "Tee Higgins", pos: "WR" },
+        { name: "Chris Olave", pos: "WR" },
+        { name: "Chase Brown", pos: "RB" }, // listed WR in board, true pos RB; allow FLEX
+        { name: "Mark Andrews", pos: "TE" },
+        { name: "Khalil Herbert", pos: "RB" },
+        { name: "Daniel Carlson", pos: "K" },
+        { name: "Kansas City Chiefs", pos: "DEF" }
+      ],
+      "Yung Brother": [
+        { name: "Baker Mayfield", pos: "QB" },
+        { name: "Nick Chubb", pos: "RB" },
+        { name: "Kenneth Walker III", pos: "RB" },
+        { name: "Javonte Williams", pos: "RB" },
+        { name: "Ja'Marr Chase", pos: "WR" },
+        { name: "DK Metcalf", pos: "WR" },
+        { name: "Deebo Samuel", pos: "WR" },
+        { name: "Christian Watson", pos: "WR" },
+        { name: "T.J. Hockenson", pos: "TE" },
+        { name: "James Cook", pos: "RB" },
+        { name: "Justin Tucker", pos: "K" },
+        { name: "San Francisco 49ers", pos: "DEF" }
+      ]
+    };
+
+    // Week matchups (example values — adjust dates/times to your league week)
+    const matchups = {
+      "Deshaun Watson": { game:"CLE vs PIT", datetime:"2025-11-30T13:00:00-05:00" },
+      "Derrick Henry": { game:"TEN vs HOU", datetime:"2025-11-30T13:00:00-05:00" },
+      "Travis Etienne Jr.": { game:"JAX vs IND", datetime:"2025-11-30T13:00:00-05:00" },
+      "Tony Pollard": { game:"DAL vs KC", datetime:"2025-11-30T13:00:00-05:00" },
+      "Justin Jefferson": { game:"MIN vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Keenan Allen": { game:"LAC vs LV", datetime:"2025-11-30T16:25:00-05:00" },
+      "Mike Williams": { game:"NYJ vs NE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Jahan Dotson": { game:"WAS vs PHI", datetime:"2025-11-30T13:00:00-05:00" },
+      "Darren Waller": { game:"NYG vs TB", datetime:"2025-11-30T13:00:00-05:00" },
+      "James Conner": { game:"ARI vs LAR", datetime:"2025-11-30T16:25:00-05:00" },
+      "Jake Elliott": { game:"PHI vs WAS", datetime:"2025-11-30T13:00:00-05:00" },
+      "Miami Dolphins": { game:"MIA vs NE", datetime:"2025-11-30T20:20:00-05:00" },
+
+      "Aaron Rodgers": { game:"NYJ vs NE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Austin Ekeler": { game:"LAC vs LV", datetime:"2025-11-30T16:25:00-05:00" },
+      "Breece Hall": { game:"NYJ vs NE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Rachaad White": { game:"TB vs NYG", datetime:"2025-11-30T13:00:00-05:00" },
+      "A.J. Brown": { game:"PHI vs WAS", datetime:"2025-11-30T13:00:00-05:00" },
+      "Amari Cooper": { game:"CLE vs PIT", datetime:"2025-11-30T13:00:00-05:00" },
+      "Chris Godwin": { game:"TB vs NYG", datetime:"2025-11-30T13:00:00-05:00" },
+      "Jerry Jeudy": { game:"DEN vs CHI", datetime:"2025-11-30T16:25:00-05:00" },
+      "Pat Freiermuth": { game:"PIT vs CLE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Dameon Pierce": { game:"HOU vs TEN", datetime:"2025-11-30T13:00:00-05:00" },
+      "Evan McPherson": { game:"CIN vs NO", datetime:"2025-11-30T13:00:00-05:00" },
+      "New York Jets": { game:"NYJ vs NE", datetime:"2025-11-30T13:00:00-05:00" },
+
+      "Josh Allen": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Bijan Robinson": { game:"ATL vs CAR", datetime:"2025-11-30T13:00:00-05:00" },
+      "Jahmyr Gibbs": { game:"DET vs GB", datetime:"2025-11-30T16:25:00-05:00" },
+      "David Montgomery": { game:"DET vs GB", datetime:"2025-11-30T16:25:00-05:00" },
+      "Stefon Diggs": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "DeVonta Smith": { game:"PHI vs WAS", datetime:"2025-11-30T13:00:00-05:00" },
+      "Drake London": { game:"ATL vs CAR", datetime:"2025-11-30T13:00:00-05:00" },
+      "Treylon Burks": { game:"TEN vs HOU", datetime:"2025-11-30T13:00:00-05:00" },
+      "Dallas Goedert": { game:"PHI vs WAS", datetime:"2025-11-30T13:00:00-05:00" },
+      "Cam Akers": { game:"MIN vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Harrison Butker": { game:"KC vs DAL", datetime:"2025-11-30T13:00:00-05:00" },
+      "Baltimore Ravens": { game:"BAL vs CIN", datetime:"2025-11-30T13:00:00-05:00" },
+
+      "Justin Herbert": { game:"LAC vs LV", datetime:"2025-11-30T16:25:00-05:00" },
+      "Saquon Barkley": { game:"NYG vs TB", datetime:"2025-11-30T13:00:00-05:00" },
+      "Joe Mixon": { game:"CIN vs NO", datetime:"2025-11-30T13:00:00-05:00" },
+      "J.K. Dobbins": { game:"BAL vs CIN", datetime:"2025-11-30T13:00:00-05:00" },
+      "Garrett Wilson": { game:"NYJ vs NE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Christian Kirk": { game:"JAX vs IND", datetime:"2025-11-30T13:00:00-05:00" },
+      "Diontae Johnson": { game:"PIT vs CLE", datetime:"2025-11-30T13:00:00-05:00" },
+      "Brandin Cooks": { game:"DAL vs KC", datetime:"2025-11-30T13:00:00-05:00" },
+      "Dalton Kincaid": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "David Njoku": { game:"CLE vs PIT", datetime:"2025-11-30T13:00:00-05:00" },
+      "Tyler Bass": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Buffalo Bills": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+
+      "Sam Darnold": { game:"MIN vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Jonathan Taylor": { game:"IND vs JAX", datetime:"2025-11-30T13:00:00-05:00" },
+      "Josh Jacobs": { game:"LV vs LAC", datetime:"2025-11-30T16:25:00-05:00" },
+      "Isiah Pacheco": { game:"KC vs DAL", datetime:"2025-11-30T13:00:00-05:00" },
+      "Tyreek Hill": { game:"MIA vs NE", datetime:"2025-11-30T20:20:00-05:00" },
+      "Tee Higgins": { game:"CIN vs NO", datetime:"2025-11-30T13:00:00-05:00" },
+      "Chris Olave": { game:"NO vs CIN", datetime:"2025-11-30T13:00:00-05:00" },
+      "Chase Brown": { game:"CIN vs NO", datetime:"2025-11-30T13:00:00-05:00" },
+      "Mark Andrews": { game:"BAL vs CIN", datetime:"2025-11-30T13:00:00-05:00" },
+      "Khalil Herbert": { game:"CHI vs DEN", datetime:"2025-11-30T16:25:00-05:00" },
+      "Daniel Carlson": { game:"LV vs LAC", datetime:"2025-11-30T16:25:00-05:00" },
+      "Kansas City Chiefs": { game:"KC vs DAL", datetime:"2025-11-30T13:00:00-05:00" },
+
+      "Baker Mayfield": { game:"TB vs NYG", datetime:"2025-11-30T13:00:00-05:00" },
+      "Nick Chubb": { game:"CLE vs PIT", datetime:"2025-11-30T13:00:00-05:00" },
+      "Kenneth Walker III": { game:"SEA vs BUF", datetime:"2025-11-30T16:05:00-05:00" },
+      "Javonte Williams": { game:"DEN vs CHI", datetime:"2025-11-30T16:25:00-05:00" },
+      "Ja'Marr Chase": { game:"CIN vs NO", datetime:"2025-11-30T13:00:00-05:00" },
+      "DK Metcalf": { game:"SEA vs BUF", datetime:"2025-11-30T16:05:00-05:00" },
+      "Deebo Samuel": { game:"SF vs LAR", datetime:"2025-11-30T16:25:00-05:00" },
+      "Christian Watson": { game:"GB vs DET", datetime:"2025-11-30T16:25:00-05:00" },
+      "T.J. Hockenson": { game:"MIN vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "James Cook": { game:"BUF vs SEA", datetime:"2025-11-30T16:05:00-05:00" },
+      "Justin Tucker": { game:"BAL vs CIN", datetime:"2025-11-30T13:00:00-05:00" },
+      "San Francisco 49ers": { game:"SF vs LAR", datetime:"2025-11-30T16:25:00-05:00" }
+    };
+
+    const POSITIONS = ["QB","RB1","RB2","WR1","WR2","FLEX","TE","K","DEF"];
+    const FLEX_ELIG = new Set(["RB","WR","TE"]);
+
+    const allPlayers = Object.entries(teams).flatMap(([team, roster]) =>
+      roster.map(p => ({...p, team}))
+    );
+
+    const byPos = (pos) => allPlayers.filter(p => {
+      if (pos === "RB1" || pos === "RB2") return p.pos === "RB";
+      if (pos === "WR1" || pos === "WR2") return p.pos === "WR";
+      if (pos === "FLEX") return FLEX_ELIG.has(p.pos);
+      return p.pos === pos;
+    });
+
+    const kickoffPassed = (name) => {
+      const m = matchups[name];
+      if (!m || !m.datetime) return false;
+      const now = new Date();
+      const t = new Date(m.datetime);
+      return now > t;
+    };
+
+    function App(){
+      const [manager, setManager] = useState("Jeff");
+      const [lineup, setLineup] = useState(() => {
+        const saved = localStorage.getItem("lineup:"+manager);
+        return saved ? JSON.parse(saved) : Object.fromEntries(POSITIONS.map(s=>[s,""]));
+      });
+      const [locked, setLocked] = useState(false);
+      const [message, setMessage] = useState("");
+
+      // Persist per manager
+      useEffect(() => {
+        localStorage.setItem("lineup:"+manager, JSON.stringify(lineup));
+      }, [manager, lineup]);
+
+      // Auto-lock if any selected player has started
+      useEffect(() => {
+        const started = Object.values(lineup).some(name => name && kickoffPassed(name));
+        setLocked(started);
+      }, [lineup]);
+
+      const managerRoster = useMemo(() => teams[manager] || [], [manager]);
+
+      const handleSelect = (slot, name) => {
+        if (locked) return;
+        setLineup(prev => ({...prev, [slot]: name}));
+        setMessage("");
+      };
+
+      const validate = () => {
+        // Ensure no duplicates across slots
+        const picks = Object.values(lineup).filter(Boolean);
+        const dupes = picks.filter((v,i,a)=>a.indexOf(v)!==i);
+        if (dupes.length){
+          setMessage("Duplicate player selected: " + [...new Set(dupes)].join(", "));
+          return false;
+        }
+        // Ensure required slot position matches (except FLEX rules)
+        for (const slot of POSITIONS){
+          const name = lineup[slot];
+          if (!name) continue;
+          const player = allPlayers.find(p=>p.name===name);
+          if (!player){ setMessage("Unknown player: "+name); return false; }
+          if (slot==="RB1"||slot==="RB2"){ if (player.pos!=="RB"){ setMessage(slot+" must be an RB"); return false; } }
+          if (slot==="WR1"||slot==="WR2"){ if (player.pos!=="WR"){ setMessage(slot+" must be a WR"); return false; } }
+          if (slot==="FLEX"){ if (!FLEX_ELIG.has(player.pos)){ setMessage("FLEX must be RB/WR/TE"); return false; } }
+          if (["QB","TE","K","DEF"].includes(slot)){ if (player.pos!==slot){ setMessage(slot+" must be "+slot); return false; } }
+        }
+        return true;
+      };
+
+      const submit = () => {
+        if (!validate()) return;
+        setLocked(true);
+        setMessage("Lineup submitted and locked. Editing will auto-disable at kickoff.");
+      };
+
+      const unlock = () => {
+        // Allow manual unlock only if no selected player has started
+        const started = Object.values(lineup).some(name => name && kickoffPassed(name));
+        if (started){
+          setMessage("Cannot unlock. One or more selected players have already started.");
+          return;
+        }
+        setLocked(false);
+        setMessage("Lineup unlocked.");
+      };
+
+      const clearLineup = () => {
+        setLineup(Object.fromEntries(POSITIONS.map(s=>[s,""])));
+        setMessage("Cleared.");
+      };
+
+      const exportLineup = () => {
+        const payload = {
+          manager,
+          lineup,
+          timestamp: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `lineup_${manager}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage("Exported lineup JSON.");
+      };
+
+      return (
+        <div className="container">
+          <div className="header">
+            <div className="title">Fantasy Lineup Manager</div>
+            <div className="row">
+              <div className="pill">Manager</div>
+              <select value={manager} onChange={e=>{setManager(e.target.value); setLineup(Object.fromEntries(POSITIONS.map(s=>[s,""]))); setMessage("");}}>
+                {Object.keys(teams).map(t=> <option key={t} value={t}>{t}</option>)}
+              </select>
+              <div className="pill">Lock status</div>
+              <span className="pill" style={{borderColor: locked? "var(--danger)":"var(--ok)", color: locked? "#ffd9d9":"#d8ffd8"}}>
+                {locked ? "Locked" : "Unlocked"}
+              </span>
+            </div>
+          </div>
+
+          <div className="card" style={{marginTop:16}}>
+            <div className="row" style={{justifyContent:"space-between"}}>
+              <div className="pill">Roster size: {managerRoster.length}</div>
+              <div className="actions">
+                <button className="btn ok" onClick={submit} disabled={locked}>Submit lineup</button>
+                <button className="btn" onClick={unlock} disabled={!locked}>Edit lineup</button>
+                <button className="btn" onClick={exportLineup}>Export JSON</button>
+                <button className="btn danger" onClick={clearLineup}>Clear</button>
+              </div>
+            </div>
+            {message && <div className={message.includes("Cannot") ? "error" : message.includes("Export") ? "success" : "muted"} style={{marginTop:8}}>{message}</div>
+            }
+          </div>
+
+          <div className="grid" style={{marginTop:16}}>
+            <div className="teamCard">
+              <h3>{manager} roster</h3>
+              <div className="list">
+                {managerRoster.map(p=>(
+                  <div key={p.name} className="row" style={{justifyContent:"space-between"}}>
+                    <div>{p.name} <span className="muted">({p.pos})</span></div>
+                    <div className="muted">{matchups[p.name]?.game || "Matchup TBD"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="teamCard" style={{gridColumn:"span 2"}}>
+              <h3>Set lineup</h3>
+              <div className="grid" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+                {POSITIONS.map(slot=>{
+                  const choices = byPos(slot);
+                  const selected = lineup[slot];
+                  const started = selected ? kickoffPassed(selected) : false;
+                  return (
+                    <div key={slot} className={"slot"+(locked ? " locked": "")}>
+                      <h4>{slot}</h4>
+                      <select value={selected} onChange={e=>handleSelect(slot, e.target.value)} disabled={locked}>
+                        <option value="">Select {slot}</option>
+                        {choices.map(p => (
+                          <option key={p.name} value={p.name}>{p.name} ({p.pos}) — {p.team}</option>
+                        ))}
+                      </select>
+                      {selected && (
+                        <div className="match">
+                          {matchups[selected]?.game || "Matchup TBD"} •
+                          {" "}
+                          {matchups[selected]?.datetime ? new Date(matchups[selected].datetime).toLocaleString() : "Time TBD"}
+                          {started ? " • Kickoff passed" : ""}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="footer">
+                - FLEX allows RB/WR/TE •
+                - Auto-lock engages when any selected player’s kickoff time has passed •
+                - No duplicates allowed across slots
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
