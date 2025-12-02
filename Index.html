@@ -25,28 +25,44 @@
   <div id="root">Loading...</div>
 
   <script>
-    // Simple CSV parser
-    function parseCSV(text) {
+    // Paste your full CSV text here between backticks
+    const csvText = `
+Team 1 - Joe/EJ ,Team 2 - Jumbo/Uly ,Team 3 - Tom/Burdick,Team 4 - Flo/Jeff,Team 5 - Al/Jon,Team 6 - Tony/Brother,Team 7 - Charlie/Rico,Team 8 - Ski/Suk
+QB,QB,QB,QB,QB,QB,QB,QB
+Dak Prescott,Daniel Jones,Josh Allen,Jared Goff,Baker Mayfield,Pat Mahomes,Joe Flacco,Lamar Jackson
+Joe Burrow,Justin Herbert,Bo Nix,C.J. Stroud,Tua Tagovailoa,Jordan Love,Jalen Hurts,Brock Purdy
+...
+WR,WR,WR,WR,WR,WR,WR,WR
+Ja'Marr Chase,Brian Thomas Jr.,Puka Nacua,Romeo Doubs,Calvin Ridley,Amon St. Brown,CeeDee Lamb,Justin Jefferson
+Emeka Egbuka,Jameson Williams,Cortland Sutton,Drake London,Mike Evans,Davante Adams,Ladd McConkey,Darius Slayton
+...
+`; // truncated for brevity — paste full CSV here
+
+    function parseLeagueCSV(text) {
       const rows = text.trim().split("\n").map(r => r.split(","));
-      const header = rows[0];
-      const data = rows.slice(1);
-      return { header, data };
-    }
-
-    function buildTeams(header, data) {
-      const iManager = header.indexOf("Manager");
-      const iPlayer  = header.indexOf("Player");
-      const iPos     = header.indexOf("Position");
-      if (iManager===-1||iPlayer===-1||iPos===-1) throw new Error("CSV must have Manager, Player, Position columns");
-
+      const headers = rows[0].map(h => h.trim());
       const teams = {};
-      data.forEach(row => {
-        const manager = row[iManager];
-        const player  = row[iPlayer];
-        const pos     = row[iPos];
-        if (!teams[manager]) teams[manager] = [];
-        teams[manager].push({ name: player, pos });
-      });
+      headers.forEach(h => { if(h) teams[h] = []; });
+
+      let currentPos = "";
+      for (let i=1; i<rows.length; i++) {
+        const row = rows[i];
+        // detect position row (e.g. QB, RB, WR)
+        if (row.every(cell => cell && cell.trim().length<=3)) {
+          currentPos = row[0].trim();
+          continue;
+        }
+        // otherwise treat as player row
+        row.forEach((cell, idx) => {
+          const player = cell.trim();
+          if (player) {
+            const teamName = headers[idx];
+            if (teamName) {
+              teams[teamName].push({ name: player, pos: currentPos });
+            }
+          }
+        });
+      }
       return teams;
     }
 
@@ -60,18 +76,8 @@
       return players.filter(p=>p.pos===slot);
     }
 
-    async function init() {
-      let teams = {};
-      try {
-        const res = await fetch("rosters.csv");
-        const text = await res.text();
-        const {header,data} = parseCSV(text);
-        teams = buildTeams(header,data);
-      } catch(e) {
-        document.getElementById("root").innerHTML = "<div class='error'>Error loading rosters.csv: "+e.message+"</div>";
-        return;
-      }
-
+    function init() {
+      const teams = parseLeagueCSV(csvText);
       let manager = Object.keys(teams)[0] || "";
       let lineup = Object.fromEntries(POSITIONS.map(s=>[s,""]));
       let locked = false;
@@ -87,4 +93,53 @@
             <div class="header">
               <div class="title">Fantasy Lineup Manager</div>
               <div class="pill">Manager</div>
-              <select id="managerSel">
+              <select id="managerSel">${Object.keys(teams).map(m=>`<option ${m===manager?"selected":""}>${m}</option>`).join("")}</select>
+              <span class="pill">${locked?"Locked":"Unlocked"}</span>
+            </div>
+
+            <div class="card">
+              <div class="actions">
+                <button id="submitBtn" ${locked?"disabled":""}>Submit lineup</button>
+                <button id="editBtn" ${!locked?"disabled":""}>Edit lineup</button>
+                <button id="clearBtn">Clear</button>
+              </div>
+              ${message?`<div class="${message.includes("error")?"error":"success"}">${message}</div>`:""}
+            </div>
+
+            <div class="grid">
+              <div class="teamCard">
+                <h3>${manager} roster</h3>
+                <div class="list">
+                  ${managerRoster.map(p=>`<div>${p.name} (${p.pos})</div>`).join("")}
+                </div>
+              </div>
+
+              <div class="teamCard" style="grid-column:span 2">
+                <h3>Set lineup</h3>
+                <div class="grid">
+                  ${POSITIONS.map(slot=>{
+                    const choices = byPos(allPlayers,slot);
+                    const selected = lineup[slot];
+                    return `
+                      <div class="slot">
+                        <h4>${slot}</h4>
+                        <select data-slot="${slot}" ${locked?"disabled":""}>
+                          <option value="">Select ${slot}</option>
+                          ${choices.map(p=>`<option value="${p.name}" ${selected===p.name?"selected":""}>${p.name} (${p.pos}) — ${p.team}</option>`).join("")}
+                        </select>
+                        ${selected?`<div>${selected}</div>`:""}
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        document.getElementById("managerSel").onchange = e => { manager=e.target.value; lineup=Object.fromEntries(POSITIONS.map(s=>[s,""])); render(); };
+        document.querySelectorAll("[data-slot]").forEach(sel=>{
+          sel.onchange = e => { lineup[e.target.dataset.slot]=e.target.value; };
+        });
+        document.getElementById("submitBtn").onclick = ()=>{ locked=true; message="Lineup submitted"; render(); };
+        document.getElementById("editBtn").onclick = ()=>{ locked=false; message="Lineup unlocked"; render(); };
